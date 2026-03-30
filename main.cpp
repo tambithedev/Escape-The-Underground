@@ -1,4 +1,4 @@
-//NEXT TASKS: create doorkeeper interaction
+//NEXT TASK(S): start developing game loop (logic detailing continuous flow of sequence of events until the game ends)
 #include <iostream>
 #include <cstring>
 #include <iomanip>
@@ -32,6 +32,7 @@ struct coordinates {
 char yesOrNoInput(string);
 void tutorial(state);
 void help(state);
+void doorkeeperInteraction();
 
 class Map{
 	private:
@@ -111,9 +112,7 @@ class Map{
 			if (isHOTU) {
 				clearMap();
 				if (playerPosition.x == DOORKEEPER_POSITION.x && playerPosition.y == DOORKEEPER_POSITION.y) {
-					if (yesOrNoInput("Speak to The Doorkeeper?") == 'y') {
-						//call function to speak to the doorkeeper
-					}
+					//call function to speak to the doorkeeper
 					return false;
 				}
 				grid[playerPosition.y][playerPosition.x] = (int)player.number;
@@ -171,9 +170,49 @@ class Player {
 			return current;
 		}
 
+		int getQuantity(string searchItem) {
+			item* current = inventory;
+			bool found;
+			int quantity;
+
+			if (current == NULL) {
+				return -1;
+			}
+
+			while (current != NULL && !(found)) {
+				if ((current->name).compare(searchItem) == 0) {
+					found = true;
+					quantity = current->quantity;
+				} else {
+					current = current->next;
+				}
+			}
+			if (!(found)) {
+				return -1;
+			}
+			return quantity;
+		}
+
 		void enterHOTU(Map map) {
 			if (map.updatePlayerPositionOnMap(getPlayerPosition(), true)) {
 				map.printMap();
+			}
+		}
+
+		void doorkeeperInteraction(Player thisPlayer) {
+			int amountOfGold = getQuantity("gold");
+			const string DOORKEEPER = magenta("The Doorkeeper");
+
+			cout << DOORKEEPER << " stares into your soul." << endl;
+			if (amountOfGold == -1) {
+				cout << DOORKEEPER << " speaks in a gravelly voice that carries the depths of the cosmos." << endl; 
+				cout << red("\"YOU. SHALL. NOT. PASS.\"") << endl;
+				cout << "You're petrified. All you can do is listen." << endl;
+				cout << red("\n\"You. Must. Pay. The. Price. Bring. Me. 50. Gold.\"") << endl;
+				cout << "You have nary a cent to your name. How can you bring this entity 50 gold?" << endl;
+				cout << "As if reading your thoughts, " << DOORKEEPER << " continues:" << endl;
+				cout << red("\n\"Fight. Earn. Your. Right. To. Leave.\"");
+				cout << "And that is all you are left with." << endl;
 			}
 		}
 
