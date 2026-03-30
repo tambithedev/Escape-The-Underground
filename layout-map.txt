@@ -1,0 +1,20 @@
+heart of the underground
+xxxxxxxxxxxxxxxxx
+xP..............x
+x...............x
+x.......D.......x
+x...............x
+x...............x
+xxxxxxxxxxxxxxxxx
+
+
+example random area (? is a mystery item (treasure, perhaps))
+xxxxxxxxxxxxxxxxx
+x...M...P.......x
+x...........M...x
+x.?.............x
+x........M......x
+x...M...........x
+xxxxxxxxxxxxxxxxx
+
+map is a 5x15 grid, x's are just for seeing the bounds of the map and .'s are empty spaces. Player spawns in the position shown in the first illustration at the start of the game, in the heart of the underground. random area is randomly generated when the player moves outside of the bounds of HOU or a different random area.
