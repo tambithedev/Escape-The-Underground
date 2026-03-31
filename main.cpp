@@ -1,4 +1,4 @@
-//NEXT TASK(S): start developing game loop (logic detailing continuous flow of sequence of events until the game ends)
+//NEXT TASK(S): refine logic for when player goes to POIs
 #include <iostream>
 #include <cstring>
 #include <iomanip>
@@ -11,7 +11,6 @@ enum state {
 	START,
 	TUTORIAL,
 	OPEN_WORLD,
-	BATTLE,
 	EXIT
 };
 
@@ -32,7 +31,6 @@ struct coordinates {
 char yesOrNoInput(string);
 void tutorial(state);
 void help(state);
-void doorkeeperInteraction();
 
 class Map{
 	private:
@@ -58,14 +56,19 @@ class Map{
 		const mapEntry monster = {MONSTER, 'M'};
 		const mapEntry doorkeeper = {DOORKEEPER, 'D'};
 		const mapEntry treasure = {TREASURE, '?'};
-
-		int grid[5][15] = {0};
 		const coordinates DOORKEEPER_POSITION = {7,2}; //Using index counting, not intuitive
 
+		int grid[5][15] = {0};
+		bool isHOTU;
+
 	public:
+		Map() {
+			isHOTU = true; //Setting this to true because when the map is first initialized, the player will spawn in the HOTU
+		}
 
 		void printMap() {
 			//First row of walls
+			cout << '\n';
 			for (int i = 0; i < MAP_X; i++) {
 				cout << wall.character;
 			}
@@ -106,7 +109,7 @@ class Map{
 			//choose whether to generate treasure: 20% chance
 		}
 
-		bool updatePlayerPositionOnMap(coordinates playerPosition, bool isHOTU) {
+		bool updatePlayerPosition(coordinates playerPosition) {
 			//add logic for if either coord is < 0 - should trigger (leave this area) confirmation
 
 			if (isHOTU) {
@@ -144,6 +147,7 @@ class Player {
 		coordinates playerPosition;
 		int health;
 		int level;
+		int returnCode = 1;
 
 	public:
 		char name = 'P';
@@ -193,10 +197,11 @@ class Player {
 			return quantity;
 		}
 
-		void enterHOTU(Map map) {
-			if (map.updatePlayerPositionOnMap(getPlayerPosition(), true)) {
+		int enterHOTU(Map map) {
+			if (map.updatePlayerPosition(getPlayerPosition())) {
 				map.printMap();
 			}
+			return 1;
 		}
 
 		void doorkeeperInteraction(Player thisPlayer) {
@@ -216,9 +221,46 @@ class Player {
 			}
 		}
 
+		void openWorldPrompt() {
+			cout << "Use w,a,s,d to move or h for help: ";
+		}
+
+		void openWorldControls(Map map) {
+			char input = '\0';
+			int returnCode;
+
+			while (!(input == 'w' || input == 'a' || input == 's' || input == 'd' || input == 'h')) {
+				openWorldPrompt();
+				cin >> input;
+				input = tolower(input);
+			}
+			switch (input) {
+				case 'w':
+					playerPosition.y--; break;
+				case 'a':
+					playerPosition.x--; break;
+				case 's':
+					playerPosition.y++; break;
+				case 'd':
+					playerPosition.x++; break;
+				case 'h':
+					help(OPEN_WORLD); break;
+				default:
+					cout << "Unrecognized command. Try again?" << endl;
+					returnCode = 1;
+			}
+			if (map.updatePlayerPosition(playerPosition)) {
+				map.printMap();
+				returnCode = 1;
+			}
+		}
+
 		//Getters
 		coordinates getPlayerPosition() {
 			return playerPosition;
+		}
+		int getReturnCode() {
+			return returnCode;
 		}
 };
 
@@ -252,7 +294,19 @@ int main() {
 	Player default_player; //Initialize the player
 	Map default_map; //Initialize the map
 
-	default_player.enterHOTU(default_map); //Player enters HOTU for the first time
+	default_player.enterHOTU(default_map); //Player enters HOTU for the first time - begin game loop
+	while (default_player.getReturnCode() > - 1) {
+		/*
+		Return codes:
+		 -1 - exit game
+		  1 - get player input
+		*/
+		switch (default_player.getReturnCode()) {
+			case 1:
+				default_player.openWorldControls(default_map); break;
+		}
+	}
+	cout << "Goodbye." << endl;
 
 	return 0;
 }
