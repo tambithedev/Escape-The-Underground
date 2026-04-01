@@ -1,4 +1,4 @@
-//NEXT TASK(S): refine logic for when player goes to POIs
+//NEXT TASK(S): fix bug where map output remains the same even though player coords change, write map generation function
 #include <iostream>
 #include <cstring>
 #include <iomanip>
@@ -63,7 +63,10 @@ class Map{
 
 	public:
 		Map() {
-			isHOTU = true; //Setting this to true because when the map is first initialized, the player will spawn in the HOTU
+			//Initializing how the map will look at game start - in HOTU with player near doorkeeper
+			isHOTU = true;
+			grid[2][3] = (int)player.number;
+			grid[DOORKEEPER_POSITION.y][DOORKEEPER_POSITION.x] = (int)doorkeeper.number;
 		}
 
 		void printMap() {
@@ -107,20 +110,36 @@ class Map{
 		void generateMap() {
 			//choose number of monsters to generate, 0-10 monsters per map 
 			//choose whether to generate treasure: 20% chance
+			//update isHOTU
 		}
 
-		bool updatePlayerPosition(coordinates playerPosition) {
+		void enterHOTU(coordinates &playerPosition) {
+			isHOTU = true;
+				if (playerPosition.x == DOORKEEPER_POSITION.x && playerPosition.y == DOORKEEPER_POSITION.y) {
+					playerPosition.x--;
+				}
+			clearMap();
+			grid[playerPosition.y][playerPosition.x] = (int)player.number;
+			grid[DOORKEEPER_POSITION.y][DOORKEEPER_POSITION.x] = (int)doorkeeper.number;
+		}
+
+		int updatePlayerPosition(coordinates previousPosition, coordinates newPosition) {
 			//add logic for if either coord is < 0 - should trigger (leave this area) confirmation
 
+			/*return codes:
+			  0 - coordinates successfully updated and no further actions taken
+			  1 - doorkeeper interaction
+			*/
+
 			if (isHOTU) {
-				clearMap();
-				if (playerPosition.x == DOORKEEPER_POSITION.x && playerPosition.y == DOORKEEPER_POSITION.y) {
+				if (newPosition.x == DOORKEEPER_POSITION.x && newPosition.y == DOORKEEPER_POSITION.y) {
 					//call function to speak to the doorkeeper
-					return false;
+					return 1;
 				}
-				grid[playerPosition.y][playerPosition.x] = (int)player.number;
+				grid[previousPosition.y][previousPosition.x] = (int)empty.number;
+				grid[newPosition.y][newPosition.x] = (int)player.number;
 				grid[DOORKEEPER_POSITION.y][DOORKEEPER_POSITION.x] = (int)doorkeeper.number;
-				return true;
+				return 0;
 			}
 			
 			//update logic for if is not HOTU and there is something there - trigger monster encounter if is monster, trigger treasure encounter if is treasure, trigger leave area prompt if is wall
@@ -131,6 +150,16 @@ class Map{
 						grid[j][i] = 0;
 				}
 			}
+		}
+
+		//Getters
+		bool getIsHOTU() {
+			return isHOTU;
+		}
+
+		//Setters
+		void setIsHOTU(bool set) {
+			isHOTU = set;
 		}
 };
 
@@ -146,7 +175,6 @@ class Player {
 		item* inventory; //I'm naming it inventory, but this is just the first entry of the inventory
 		coordinates playerPosition;
 		int health;
-		int level;
 		int returnCode = 1;
 
 	public:
@@ -154,8 +182,7 @@ class Player {
 		
 		//Constructor
 		Player() {
-			health = 10;
-			level = 1;
+			health = 25;
 			inventory = NULL;
 			playerPosition.x = 3;
 			playerPosition.y = 2;
@@ -198,13 +225,11 @@ class Player {
 		}
 
 		int enterHOTU(Map map) {
-			if (map.updatePlayerPosition(getPlayerPosition())) {
-				map.printMap();
-			}
+			map.enterHOTU(playerPosition);
 			return 1;
 		}
 
-		void doorkeeperInteraction(Player thisPlayer) {
+		bool doorkeeperInteraction() {
 			int amountOfGold = getQuantity("gold");
 			const string DOORKEEPER = magenta("The Doorkeeper");
 
@@ -216,9 +241,17 @@ class Player {
 				cout << red("\n\"You. Must. Pay. The. Price. Bring. Me. 50. Gold.\"") << endl;
 				cout << "You have nary a cent to your name. How can you bring this entity 50 gold?" << endl;
 				cout << "As if reading your thoughts, " << DOORKEEPER << " continues:" << endl;
-				cout << red("\n\"Fight. Earn. Your. Right. To. Leave.\"");
+				cout << red("\n\"Fight. Earn. Your. Right. To. Leave.\"") << endl;
 				cout << "And that is all you are left with." << endl;
+				return false;
 			}
+			if (amountOfGold <= 50) {
+				//some dialogue
+				return false;
+			}
+			
+			//some dialogue for 50+ gold (game won)
+			return true;
 		}
 
 		void openWorldPrompt() {
@@ -228,30 +261,75 @@ class Player {
 		void openWorldControls(Map map) {
 			char input = '\0';
 			int returnCode;
+			int updatePlayerPositionReturnCode = -1;
 
-			while (!(input == 'w' || input == 'a' || input == 's' || input == 'd' || input == 'h')) {
+			while (!(input == 'w' || input == 'a' || input == 's' || input == 'd' || input == 'h' || input == 't' || input == 'p')) {
+				map.printMap();
 				openWorldPrompt();
 				cin >> input;
 				input = tolower(input);
 			}
 			switch (input) {
 				case 'w':
-					playerPosition.y--; break;
+					updatePlayerPositionReturnCode = map.updatePlayerPosition(playerPosition, {playerPosition.x, playerPosition.y - 1});
+					if (updatePlayerPositionReturnCode == 0) {
+						playerPosition.y--;
+					}
+					break;
 				case 'a':
-					playerPosition.x--; break;
+					updatePlayerPositionReturnCode = map.updatePlayerPosition(playerPosition, {playerPosition.x - 1, playerPosition.y});
+					if (updatePlayerPositionReturnCode == 0) {
+						playerPosition.x--;
+					}
+					break;
 				case 's':
-					playerPosition.y++; break;
+					updatePlayerPositionReturnCode = map.updatePlayerPosition(playerPosition, {playerPosition.x, playerPosition.y + 1});
+					if (updatePlayerPositionReturnCode == 0) {
+						playerPosition.y++;
+					}
+					break;
 				case 'd':
+					updatePlayerPositionReturnCode = map.updatePlayerPosition(playerPosition, {playerPosition.x + 1, playerPosition.y});
+					if (updatePlayerPositionReturnCode == 0) {
+						playerPosition.x++;
+					}
+					break;
 					playerPosition.x++; break;
 				case 'h':
-					help(OPEN_WORLD); break;
+					help(OPEN_WORLD);
+					returnCode = 1;
+					break;
+				case 't':
+					if (map.getIsHOTU()) {
+						cout << "You are already in " << magenta("The Heart of The Underground") << "." << endl;
+					} else {
+						if (yesOrNoInput("Enter " + magenta("The Heart of The Underground") + "?") == 'y') {
+							enterHOTU(map);
+						}
+					}
+					returnCode = 1;
+					break;
+				case 'p':
+					cout << "Health: " << health << endl;
+					//method to output inventory
+					break;
 				default:
 					cout << "Unrecognized command. Try again?" << endl;
 					returnCode = 1;
 			}
-			if (map.updatePlayerPosition(playerPosition)) {
-				map.printMap();
-				returnCode = 1;
+			if (!(input == 'h' || input == 't')) {
+				switch (updatePlayerPositionReturnCode) {
+					case 0:
+						returnCode = 1;
+						break;
+					case 1:
+						if (doorkeeperInteraction()) {
+							returnCode = 0; //Game over, won
+						}
+						break;
+					default:
+						returnCode = 0;
+				}
 			}
 		}
 
@@ -295,10 +373,11 @@ int main() {
 	Map default_map; //Initialize the map
 
 	default_player.enterHOTU(default_map); //Player enters HOTU for the first time - begin game loop
-	while (default_player.getReturnCode() > - 1) {
+	while (default_player.getReturnCode() > 0) {
 		/*
 		Return codes:
-		 -1 - exit game
+		 -1 - exit game (lost)
+		  0 - exit game (won)
 		  1 - get player input
 		*/
 		switch (default_player.getReturnCode()) {
@@ -330,9 +409,9 @@ void tutorial(state gamestate) {
 	cout << "You are " << magenta("P") << ", the Player. You find yourself trapped in a mysterious world you know only as " << underground << "." << endl;
 	cout << "You will have to " << red("fight to the death") << " to escape. Or will you?" << endl;
 	cout << magenta("Monsters") << " can be found randomly throughout " << underground << ". The only way to escape is to get " << yellow("Gold") << " from Monsters to give to " << doorkeeper << "." << endl;
-	cout << doorkeeper << " can be found in the heart of " << underground << ". The areas outside of this place are never constant, ever shifting. Once you leave an area, you may never find another one like it." << endl;
+	cout << doorkeeper << " can be found in " << magenta("The Heart of ") << underground << ". The areas outside of this place are never constant, ever shifting. Once you leave an area, you may never find another one like it." << endl;
 	cout << "Should you fight them? Or should you make more strategic decisions? It's all up to you..." << endl;
-	cout << "Keep an eye on your stats: your " << yellow("Health") << ", " << yellow("Level") << ", and " << yellow("Inventory") << " will all be important to you." << endl;
+	cout << "Keep an eye on your stats: your " << yellow("Health") << " and " << yellow("Inventory") << " will both be important to you." << endl;
 	cout << "Will you perish? Will you manage to escape? Or will you be trapped here " << red("Forever") << "? It all rests on you, Player. Good luck.\n" << endl;
 	help(gamestate);
 }
