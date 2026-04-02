@@ -1,4 +1,4 @@
-//NEXT TASK(S): fix bug where map output remains the same even though player coords change, write map generation function
+//NEXT TASK(S): still fix bug where map output remains the same even though player coords change. it looks like updatePlayerPosition doesn't actually do so?; write map generation function
 #include <iostream>
 #include <cstring>
 #include <iomanip>
@@ -113,7 +113,7 @@ class Map{
 			//update isHOTU
 		}
 
-		void enterHOTU(coordinates &playerPosition) {
+		void enterHOTU(coordinates &playerPosition) { //Teleporting to the HOTU
 			isHOTU = true;
 				if (playerPosition.x == DOORKEEPER_POSITION.x && playerPosition.y == DOORKEEPER_POSITION.y) {
 					playerPosition.x--;
@@ -155,6 +155,17 @@ class Map{
 		//Getters
 		bool getIsHOTU() {
 			return isHOTU;
+		}
+		  //Mainly writing this for Debugging purposes but I'll leave it here just in case
+		coordinates getPlayerPosition() {
+			bool found = false;
+			for (int i = 0; i < MAX_X && !(found); i++) {
+					for (int j = 0; j < MAX_Y && !(found); j++) {
+						if (grid[j][i] == (int)player.number) {
+							return {i,j};
+						}
+					}
+				}
 		}
 
 		//Setters
@@ -312,6 +323,7 @@ class Player {
 				case 'p':
 					cout << "Health: " << health << endl;
 					//method to output inventory
+					returnCode = 1;
 					break;
 				default:
 					cout << "Unrecognized command. Try again?" << endl;
@@ -382,7 +394,8 @@ int main() {
 		*/
 		switch (default_player.getReturnCode()) {
 			case 1:
-				default_player.openWorldControls(default_map); break;
+				default_player.openWorldControls(default_map); //break;
+				cout << default_map.getPlayerPosition().x << ", " << default_map.getPlayerPosition().y << endl; break; //debugging
 		}
 	}
 	cout << "Goodbye." << endl;
