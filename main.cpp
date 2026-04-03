@@ -1,7 +1,8 @@
-//NEXT TASK(S): still fix bug where map output remains the same even though player coords change. it looks like updatePlayerPosition doesn't actually do so?; write map generation function
+//NEXT TASK(S): "illegal instruction" crash when trying to leave HOTU? Oh boy. After checking, the bug does not come from the generateMap function itself, so need to investigate somewhere between confirming leaving the area and generating the map.
 #include <iostream>
 #include <cstring>
 #include <iomanip>
+#include <time.h>
 #include "terminal_colours.h"
 
 using namespace std;
@@ -36,20 +37,11 @@ class Map{
 	private:
 		const int MAX_X = 15; const int MAX_Y = 5;
 		const int MAP_X = 17; const int MAP_Y = 7;
-		/*
-		 - Previous implementation
-		const char EMPTY = '.';
-		const char WALL = 'x';
-		const char PLAYER = 'P';
-		const char MONSTER = 'M';
-		const char DOORKEEPER = 'D';
-		const char TREASURE = '?';
-		*/
+
 		struct mapEntry {
 			mapItem number;
 			char character;
 		};
-
 		const mapEntry empty = {EMPTY, '.'};
 		const mapEntry wall = {WALL, 'x'};
 		const mapEntry player = {PLAYER, 'P'};
@@ -65,11 +57,10 @@ class Map{
 		Map() {
 			//Initializing how the map will look at game start - in HOTU with player near doorkeeper
 			isHOTU = true;
-			grid[2][3] = (int)player.number;
 			grid[DOORKEEPER_POSITION.y][DOORKEEPER_POSITION.x] = (int)doorkeeper.number;
 		}
 
-		void printMap() {
+		void printMap(coordinates playerPosition) {
 			//First row of walls
 			cout << '\n';
 			for (int i = 0; i < MAP_X; i++) {
@@ -78,15 +69,19 @@ class Map{
 			cout << '\n';
 
 			for (int j = 0; j < MAX_Y; j++) {
+				//Left wall border
 				cout << wall.character;
+				//Map items
 				for (int i = 0; i < MAX_X; i++) {
+					if (j == playerPosition.y && i == playerPosition.x) {
+						cout << player.character;
+						continue;
+					}
 					switch (grid[j][i]) {
 						case 0:
 							cout << empty.character; break;
 						case 1:
 							cout << wall.character; break;
-						case 2:
-							cout << player.character; break;
 						case 3:
 							cout << monster.character; break;
 						case 4:
@@ -97,6 +92,7 @@ class Map{
 							cout << empty.character;
 					}
 				}
+				//Right wall border
 				cout << wall.character << '\n';
 			}
 
@@ -107,10 +103,36 @@ class Map{
 			cout << '\n';
 		}
 
-		void generateMap() {
-			//choose number of monsters to generate, 0-10 monsters per map 
-			//choose whether to generate treasure: 20% chance
-			//update isHOTU
+		void generateMap(coordinates playerPosition) {
+			isHOTU = false;
+			clearMap();
+
+			//Choose number of monsters to generate, 0-10 monsters per map 
+			int numberOfMonsters = rand() % 10;
+			bool placed = false;
+			placeItem(playerPosition, numberOfMonsters, (int)monster.number);
+
+			//Choose whether to generate treasure: 20% chance
+			int placeTreasureChance = rand() % 99;
+			if (placeTreasureChance >= 80) {
+				placeItem(playerPosition, 1, (int)treasure.number);
+			}
+		}
+		void placeItem(coordinates playerPosition, int iterations, int item) { //Supplements generateMap
+			bool placed = false;
+			int random_x = -1, random_y = -1;
+
+			for (int i = 0; i < iterations; i++) {
+				while (!(placed)) {
+					random_x = rand() % MAX_X;
+					random_y = rand() % MAX_Y;
+					if (!(playerPosition.x == random_x && playerPosition.y == random_y) && (grid[random_y][random_x] == (int)empty.number)) {
+						grid[random_y][random_x] = item;
+						placed = true;
+					}
+				}
+				placed = false;
+			}
 		}
 
 		void enterHOTU(coordinates &playerPosition) { //Teleporting to the HOTU
@@ -119,11 +141,10 @@ class Map{
 					playerPosition.x--;
 				}
 			clearMap();
-			grid[playerPosition.y][playerPosition.x] = (int)player.number;
 			grid[DOORKEEPER_POSITION.y][DOORKEEPER_POSITION.x] = (int)doorkeeper.number;
 		}
 
-		int updatePlayerPosition(coordinates previousPosition, coordinates newPosition) {
+		int tryMove(coordinates newPosition) {
 			//add logic for if either coord is < 0 - should trigger (leave this area) confirmation
 
 			/*return codes:
@@ -133,12 +154,8 @@ class Map{
 
 			if (isHOTU) {
 				if (newPosition.x == DOORKEEPER_POSITION.x && newPosition.y == DOORKEEPER_POSITION.y) {
-					//call function to speak to the doorkeeper
 					return 1;
 				}
-				grid[previousPosition.y][previousPosition.x] = (int)empty.number;
-				grid[newPosition.y][newPosition.x] = (int)player.number;
-				grid[DOORKEEPER_POSITION.y][DOORKEEPER_POSITION.x] = (int)doorkeeper.number;
 				return 0;
 			}
 			
@@ -156,17 +173,6 @@ class Map{
 		bool getIsHOTU() {
 			return isHOTU;
 		}
-		  //Mainly writing this for Debugging purposes but I'll leave it here just in case
-		coordinates getPlayerPosition() {
-			bool found = false;
-			for (int i = 0; i < MAX_X && !(found); i++) {
-					for (int j = 0; j < MAX_Y && !(found); j++) {
-						if (grid[j][i] == (int)player.number) {
-							return {i,j};
-						}
-					}
-				}
-		}
 
 		//Setters
 		void setIsHOTU(bool set) {
@@ -183,7 +189,8 @@ class Player {
 	};
 
 	private:
-		item* inventory; //I'm naming it inventory, but this is just the first entry of the inventory
+		const int MIN_X = 0; const int MAX_X = 15; const int MIN_Y = 0; const int MAX_Y = 5;
+		item* inventory; //I'm naming it inventory, but this is just the first entry of the inventory (head of LL)
 		coordinates playerPosition;
 		int health;
 		int returnCode = 1;
@@ -199,17 +206,21 @@ class Player {
 			playerPosition.y = 2;
 		}
 
-		item* getLastItem() { //i started writing this function (as just getItem) then realized when I was almost done that this will only return the last item. To get a specific item, I will need to do a search function
-			//I will also need another function to list every item in the inventory
+		void showInventory() {
+			bool noItems = false;
 			if (inventory == NULL) {
-				return NULL;
+				noItems = true;
+				cout << "You check the mysterious bag on your back only to find absolutely nothing.\n";
 			}
 
-			item* current = inventory;
-			while (current->next != NULL) {
-				current = current->next;
+			if (!(noItems)) {
+				item* current = inventory;
+				cout << "You check the mysterious bag on your back to find that you have:\n";
+				while (current->next != NULL) {
+					cout << current->quantity << " " << current->name << '\n';
+					current = current->next;
+				}
 			}
-			return current;
 		}
 
 		int getQuantity(string searchItem) {
@@ -235,7 +246,7 @@ class Player {
 			return quantity;
 		}
 
-		int enterHOTU(Map map) {
+		int enterHOTU(Map &map) {
 			map.enterHOTU(playerPosition);
 			return 1;
 		}
@@ -244,12 +255,12 @@ class Player {
 			int amountOfGold = getQuantity("gold");
 			const string DOORKEEPER = magenta("The Doorkeeper");
 
-			cout << DOORKEEPER << " stares into your soul." << endl;
+			cout << '\n' << DOORKEEPER << " stares into your soul." << endl;
 			if (amountOfGold == -1) {
 				cout << DOORKEEPER << " speaks in a gravelly voice that carries the depths of the cosmos." << endl; 
 				cout << red("\"YOU. SHALL. NOT. PASS.\"") << endl;
 				cout << "You're petrified. All you can do is listen." << endl;
-				cout << red("\n\"You. Must. Pay. The. Price. Bring. Me. 50. Gold.\"") << endl;
+				cout << red("\n\"You. Must. Pay. The. Price. Bring. Me. ") << yellow("50. Gold.\"") << endl;
 				cout << "You have nary a cent to your name. How can you bring this entity 50 gold?" << endl;
 				cout << "As if reading your thoughts, " << DOORKEEPER << " continues:" << endl;
 				cout << red("\n\"Fight. Earn. Your. Right. To. Leave.\"") << endl;
@@ -269,79 +280,89 @@ class Player {
 			cout << "Use w,a,s,d to move or h for help: ";
 		}
 
-		void openWorldControls(Map map) {
+		void openWorldControls(Map &map) {
 			char input = '\0';
 			int returnCode;
-			int updatePlayerPositionReturnCode = -1;
+			int tryMoveReturnCode = -1;
+			bool movePlayer = true;
 
 			while (!(input == 'w' || input == 'a' || input == 's' || input == 'd' || input == 'h' || input == 't' || input == 'p')) {
-				map.printMap();
+				map.printMap(playerPosition);
 				openWorldPrompt();
 				cin >> input;
 				input = tolower(input);
 			}
-			switch (input) {
-				case 'w':
-					updatePlayerPositionReturnCode = map.updatePlayerPosition(playerPosition, {playerPosition.x, playerPosition.y - 1});
-					if (updatePlayerPositionReturnCode == 0) {
-						playerPosition.y--;
-					}
-					break;
-				case 'a':
-					updatePlayerPositionReturnCode = map.updatePlayerPosition(playerPosition, {playerPosition.x - 1, playerPosition.y});
-					if (updatePlayerPositionReturnCode == 0) {
-						playerPosition.x--;
-					}
-					break;
-				case 's':
-					updatePlayerPositionReturnCode = map.updatePlayerPosition(playerPosition, {playerPosition.x, playerPosition.y + 1});
-					if (updatePlayerPositionReturnCode == 0) {
-						playerPosition.y++;
-					}
-					break;
-				case 'd':
-					updatePlayerPositionReturnCode = map.updatePlayerPosition(playerPosition, {playerPosition.x + 1, playerPosition.y});
-					if (updatePlayerPositionReturnCode == 0) {
-						playerPosition.x++;
-					}
-					break;
-					playerPosition.x++; break;
-				case 'h':
-					help(OPEN_WORLD);
-					returnCode = 1;
-					break;
-				case 't':
-					if (map.getIsHOTU()) {
-						cout << "You are already in " << magenta("The Heart of The Underground") << "." << endl;
+			if (input == 'w' || input == 'a' || input == 's' || input == 'd') {
+				coordinates newPosition = playerPosition;
+				switch (input) {
+					case 'w':
+						newPosition.y--; break;
+					case 'a':
+						newPosition.x--; break;
+					case 's':
+						newPosition.y++; break;
+					case 'd':
+						newPosition.x++; break;
+				}
+				//Generate new map if player moves out of bounds
+				if (newPosition.x < MIN_X || newPosition.x >= MAX_X || newPosition.y < MIN_Y || newPosition.y >= MAX_Y) {
+					if (yesOrNoInput("Leave this area behind and enter a new one?") == 'n') {
+						movePlayer = false;
 					} else {
-						if (yesOrNoInput("Enter " + magenta("The Heart of The Underground") + "?") == 'y') {
-							enterHOTU(map);
+						if (newPosition.x < MIN_X) {
+							newPosition.x = MIN_X;
 						}
+						if (newPosition.x >= MAX_X) {
+							newPosition.x = MAX_X;
+						}
+						if (newPosition.y < MIN_Y) {
+							newPosition.x = MIN_Y;
+						}
+						if (newPosition.y >= MAX_Y) {
+							newPosition.x = MAX_Y;
+						}
+					map.generateMap(playerPosition);
 					}
-					returnCode = 1;
-					break;
-				case 'p':
-					cout << "Health: " << health << endl;
-					//method to output inventory
-					returnCode = 1;
-					break;
-				default:
-					cout << "Unrecognized command. Try again?" << endl;
-					returnCode = 1;
-			}
-			if (!(input == 'h' || input == 't')) {
-				switch (updatePlayerPositionReturnCode) {
-					case 0:
-						returnCode = 1;
-						break;
-					case 1:
-						if (doorkeeperInteraction()) {
-							returnCode = 0; //Game over, won
+				}
+				if (movePlayer) {
+					tryMoveReturnCode = map.tryMove(newPosition);
+					switch (tryMoveReturnCode) {
+						case 0:
+							playerPosition = newPosition;
+							returnCode = 1;
+							break;
+						case 1:
+							if (doorkeeperInteraction()) {
+								returnCode = 0; //Game over, won
+							} else {
+								returnCode = 1;
+							}
+							break;
+						default:
+							returnCode = 1;
+					}
+				}
+			} else {
+				switch (input) {
+					case 'h':
+						help(OPEN_WORLD); returnCode = 1; break;
+					case 't':
+						if (map.getIsHOTU()) {
+							cout << "You are already in " << magenta("The Heart of The Underground") << "." << endl;
+						} else {
+							if (yesOrNoInput("Enter " + magenta("The Heart of The Underground") + "?") == 'y') {
+								enterHOTU(map);
+							}
 						}
+						break;
+					case 'p':
+						cout << "Your health is at a healthy " << health << "." << endl;
+						showInventory();
 						break;
 					default:
-						returnCode = 0;
+						cout << "Unrecognized command. Try again?" << endl;
 				}
+				returnCode = 1;
 			}
 		}
 
@@ -357,6 +378,7 @@ class Player {
 int main() {
 	string gameName = cyan("Escape The Underground");
 	char yn = '\0';
+	srand(time(0));
 
 	state gamestate = START;
 	cout << "Welcome to " << gameName << "!" << "\nYour mission is simple.\nYou are trapped. Escape at any cost." << "\nAnd it will cost you..." << endl;
@@ -394,8 +416,7 @@ int main() {
 		*/
 		switch (default_player.getReturnCode()) {
 			case 1:
-				default_player.openWorldControls(default_map); //break;
-				cout << default_map.getPlayerPosition().x << ", " << default_map.getPlayerPosition().y << endl; break; //debugging
+				default_player.openWorldControls(default_map); break;
 		}
 	}
 	cout << "Goodbye." << endl;
