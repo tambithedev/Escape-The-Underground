@@ -1,4 +1,4 @@
-//NEXT TASK(S): "illegal instruction" crash when trying to leave HOTU? Oh boy. After checking, the bug does not come from the generateMap function itself, so need to investigate somewhere between confirming leaving the area and generating the map.
+//NEXT TASK(S): create treasure interaction (including add to inventory), monster class
 #include <iostream>
 #include <cstring>
 #include <iomanip>
@@ -145,20 +145,27 @@ class Map{
 		}
 
 		int tryMove(coordinates newPosition) {
-			//add logic for if either coord is < 0 - should trigger (leave this area) confirmation
-
 			/*return codes:
 			  0 - coordinates successfully updated and no further actions taken
 			  1 - doorkeeper interaction
+			  2 - treasure interaction
+			  3 - monster interaction
 			*/
 
 			if (isHOTU) {
-				if (newPosition.x == DOORKEEPER_POSITION.x && newPosition.y == DOORKEEPER_POSITION.y) {
+				if ((newPosition.x == DOORKEEPER_POSITION.x) && (newPosition.y == DOORKEEPER_POSITION.y)) {
 					return 1;
 				}
 				return 0;
 			}
-			
+
+			if (grid[newPosition.y][newPosition.x] == (int)treasure.number) {
+				return 2;
+			} else if (grid[newPosition.y][newPosition.x] == (int)monster.number) {
+				return 3;
+			}
+			return 0;
+				
 			//update logic for if is not HOTU and there is something there - trigger monster encounter if is monster, trigger treasure encounter if is treasure, trigger leave area prompt if is wall
 		}
 		void clearMap() {
@@ -306,22 +313,23 @@ class Player {
 				}
 				//Generate new map if player moves out of bounds
 				if (newPosition.x < MIN_X || newPosition.x >= MAX_X || newPosition.y < MIN_Y || newPosition.y >= MAX_Y) {
-					if (yesOrNoInput("Leave this area behind and enter a new one?") == 'n') {
+					if (yesOrNoInput("\nLeave this area behind and enter a new one?") == 'n') {
 						movePlayer = false;
 					} else {
 						if (newPosition.x < MIN_X) {
-							newPosition.x = MIN_X;
+							newPosition.x = MAX_X - 1;
 						}
 						if (newPosition.x >= MAX_X) {
-							newPosition.x = MAX_X;
+							newPosition.x = MIN_X;
 						}
 						if (newPosition.y < MIN_Y) {
-							newPosition.x = MIN_Y;
+							newPosition.y = MAX_X - 1;
 						}
 						if (newPosition.y >= MAX_Y) {
-							newPosition.x = MAX_Y;
+							newPosition.y = MIN_Y;
 						}
-					map.generateMap(playerPosition);
+					map.generateMap(newPosition);
+					cout << "You have left this realm behind...\n";
 					}
 				}
 				if (movePlayer) {
