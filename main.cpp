@@ -1,4 +1,4 @@
-//NEXT TASK(S): create treasure interaction (including add to inventory), monster class
+//NEXT TASK(S): code monster fight sequence, write deleteItem function (yikes)
 #include <iostream>
 #include <cstring>
 #include <iomanip>
@@ -114,7 +114,7 @@ class Map{
 
 			//Choose whether to generate treasure: 20% chance
 			int placeTreasureChance = rand() % 99;
-			if (placeTreasureChance >= 80) {
+			if (placeTreasureChance >= 0) { //debugging - set to - instead of 80
 				placeItem(playerPosition, 1, (int)treasure.number);
 			}
 		}
@@ -133,6 +133,10 @@ class Map{
 				}
 				placed = false;
 			}
+		}
+
+		void removeItem(coordinates position) {
+			grid[position.y][position.x] = (int)empty.number;
 		}
 
 		void enterHOTU(coordinates &playerPosition) { //Teleporting to the HOTU
@@ -165,9 +169,8 @@ class Map{
 				return 3;
 			}
 			return 0;
-				
-			//update logic for if is not HOTU and there is something there - trigger monster encounter if is monster, trigger treasure encounter if is treasure, trigger leave area prompt if is wall
 		}
+
 		void clearMap() {
 			for (int i = 0; i < MAX_X; i++) {
 				for (int j = 0; j < MAX_Y; j++) {
@@ -197,6 +200,7 @@ class Player {
 
 	private:
 		const int MIN_X = 0; const int MAX_X = 15; const int MIN_Y = 0; const int MAX_Y = 5;
+		const int MAX_HEALTH = 50;
 		item* inventory; //I'm naming it inventory, but this is just the first entry of the inventory (head of LL)
 		coordinates playerPosition;
 		int health;
@@ -214,43 +218,62 @@ class Player {
 		}
 
 		void showInventory() {
-			bool noItems = false;
 			if (inventory == NULL) {
-				noItems = true;
 				cout << "You check the mysterious bag on your back only to find absolutely nothing.\n";
-			}
-
-			if (!(noItems)) {
+			} else {
 				item* current = inventory;
 				cout << "You check the mysterious bag on your back to find that you have:\n";
-				while (current->next != NULL) {
-					cout << current->quantity << " " << current->name << '\n';
+				do {
+					cout << current->quantity << " " << yellow(current->name) << '\n';
 					current = current->next;
-				}
+				} while (current != NULL);
 			}
 		}
 
-		int getQuantity(string searchItem) {
-			item* current = inventory;
-			bool found;
-			int quantity;
-
-			if (current == NULL) {
-				return -1;
+		item* getItemPointer(string searchItem) {
+			if (inventory == NULL) {
+				return NULL;
 			}
 
-			while (current != NULL && !(found)) {
+			item* current = inventory;
+			while (current != NULL) {
 				if ((current->name).compare(searchItem) == 0) {
-					found = true;
-					quantity = current->quantity;
+					return current;
+				}
+				current = current->next;
+			}
+			return NULL;
+		}
+
+		int getQuantity(string searchItem) {
+			item* position = getItemPointer(searchItem);
+			if (position == NULL) {
+				return -1;
+			}
+			int quantity = position->quantity;
+			return quantity;
+		}
+
+		void addItem(string name, int quantity, bool isCombatItem) {
+			//Search for if it's there first, if so add to existing quantity, otherwise add node to linked list containing item
+
+			item* position = getItemPointer(name);
+			if (position != NULL) {
+				position->quantity += quantity;
+			} else {
+				//Add to end of linked list
+				
+				item* newItem = new item {name, quantity, isCombatItem, NULL};
+				if (inventory == NULL) {
+					inventory = newItem;
 				} else {
-					current = current->next;
+					item* current = inventory;
+					while (current->next != NULL) {
+						current = current->next;
+					}
+					current->next = newItem;
 				}
 			}
-			if (!(found)) {
-				return -1;
-			}
-			return quantity;
 		}
 
 		int enterHOTU(Map &map) {
@@ -274,13 +297,58 @@ class Player {
 				cout << "And that is all you are left with." << endl;
 				return false;
 			}
-			if (amountOfGold <= 50) {
-				//some dialogue
+			if (amountOfGold < 50) {
+				cout << '\n' << DOORKEEPER << "'s voice " << bold("rages") << ", quaking the very foundation of this universe.\n"; 
+				cout << red("\"YOUR. GOLD. IS. INADEQUATE.\"\n");
+				cout << DOORKEEPER << " hurls you away.\n";
 				return false;
 			}
 			
 			//some dialogue for 50+ gold (game won)
 			return true;
+		}
+		void treasureInteraction() {
+			//Choose random treasure, add to inventory
+			//Treasure: sword, potion of health, gold, funny joke, bribe, armor
+
+			string sword = yellow("sword");
+
+			cout << yellow("\nWhat's this? ") << "you stumble upon";
+			int item = rand() % 7;
+			switch (item) {
+				case 0:
+					cout << " a " << sword << "!\n";
+					if (getQuantity("sword") != -1) {
+						cout << "Since this is not your first " << sword << ", you combine them to do " << yellow("more damage!\n");
+					}
+					addItem("sword", 1, true);
+					break;
+				case 1:
+					cout << " a " << yellow("Potion of Health") << "! Use it to keep your health up!\n";
+					addItem("potion_of_health", 1, true);
+					break;
+				case 2:
+					{int quantity = (rand() % 3) + 1;
+					cout << " " << quantity << yellow(" Gold") << "!\n";
+					addItem("gold", quantity, false);};
+					break;
+				case 3:
+					cout << "... a " << yellow("funny joke") << "? Huh. I'm sure that'll be useful.\n";
+					addItem("funny_joke", 1, true);
+					break;
+				case 4:
+					cout << "... an " << yellow("unfunny joke") << "? What a truly terrible joke. You wonder how this could possibly be useful to you.\n";
+					addItem("unfunny_joke", 1, true);
+					break;
+				case 5:
+					cout << "... wait, what is it? You're not sure, but you think it might be a " << yellow("bribe") << "! Better be careful with that...\n";
+					addItem("bribe", 1, true);
+					break;
+				case 6:
+					cout << " " << yellow("armor") << "! That'll get your defenses up!\n";
+					addItem("armor", 1, false);
+					break;
+			}
 		}
 
 		void openWorldPrompt() {
@@ -323,7 +391,7 @@ class Player {
 							newPosition.x = MIN_X;
 						}
 						if (newPosition.y < MIN_Y) {
-							newPosition.y = MAX_X - 1;
+							newPosition.y = MAX_Y - 1;
 						}
 						if (newPosition.y >= MAX_Y) {
 							newPosition.y = MIN_Y;
@@ -346,6 +414,12 @@ class Player {
 								returnCode = 1;
 							}
 							break;
+						case 2:
+							treasureInteraction();
+							map.removeItem(newPosition);
+							map.tryMove(newPosition);
+							playerPosition = newPosition;
+							break;
 						default:
 							returnCode = 1;
 					}
@@ -364,7 +438,7 @@ class Player {
 						}
 						break;
 					case 'p':
-						cout << "Your health is at a healthy " << health << "." << endl;
+						cout << "\nYour " << yellow("health") << " is at a healthy " << health << "." << endl;
 						showInventory();
 						break;
 					default:
@@ -381,6 +455,27 @@ class Player {
 		int getReturnCode() {
 			return returnCode;
 		}
+};
+
+class Monster {
+	private:
+		const int MAX_HEALTH = 30;
+		const int MAX_DAMAGE = 10;
+		int health;
+		int senseOfHumour; //0 is the worst sense of humour, 99 is the best
+		int willingnessToSurrender; //0 is not willing at all, 99 is will fold immediately, anything in between is up to chance
+		int surrenderThreshold; //The minimum number willingnessToSurrender has to be for the monster to surrender
+		int damageChance;
+
+	public:
+		Monster() {
+			health = (rand() % MAX_HEALTH) + 1;
+			senseOfHumour = rand() % 100;
+			willingnessToSurrender = (rand() % 99) + 1; //Makes it so that if willingnessToSurrender is 0, it will never surrender
+			surrenderThreshold = rand() % 100;
+			damageChance = (rand() % 95) + 5;
+		}
+	
 };
 
 int main() {
@@ -462,7 +557,6 @@ void help(state gamestate) {
 	string i = blue("i");
 	cout << "Controls:" << endl;
 	cout << "Use " << blue("w,a,s,d") << " to traverse the map. You can input multiple moves at once to save time." << endl;
-	cout << "\nUse " << i << " to check your inventory." << endl;
 	cout << "Use " << blue("p") << " to check your stats." << endl;
 	cout << "Use " << blue("t") << " to leave your current area and teleport to " << magenta("The Doorkeeper") << "." << endl;
 
@@ -470,7 +564,7 @@ void help(state gamestate) {
 	if (gamestate == TUTORIAL) {
 		cout << "Battle controls shall be revealed soon." << endl;
 	} else {
-		cout << "In battle, use " << i << " to use an item, " << blue("s") << " to select a weapon (if you have one), " << blue("a") << " to attack and " << blue("r") << " to run away." << endl;
+		cout << "In battle, use " << i << " to use an item, " << blue("a") << " to attack and " << blue("r") << " to run away." << endl;
 		cout << "These controls will be shown in the battle menu as well." << endl;
 	}
 	cout << "\nUse " << blue("h") << " to show this menu." << endl;
