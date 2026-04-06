@@ -114,7 +114,7 @@ class Map{
 
 			//Choose whether to generate treasure: 20% chance
 			int placeTreasureChance = rand() % 99;
-			if (placeTreasureChance >= 0) { //debugging - set to - instead of 80
+			if (placeTreasureChance >= 80) {
 				placeItem(playerPosition, 1, (int)treasure.number);
 			}
 		}
@@ -190,6 +190,53 @@ class Map{
 		}
 };
 
+class Monster {
+	private:
+		const int MAX_HEALTH = 30;
+		const int MAX_DAMAGE = 10;
+		int health;
+		int senseOfHumour; //0 is the worst sense of humour, 99 is the best
+		int willingnessToSurrender; //0 is not willing at all, 99 is will fold immediately, anything in between is up to chance
+		int surrenderThreshold; //The minimum number willingnessToSurrender has to be for the monster to surrender
+		int damageChance;
+
+	public:
+		Monster() {
+			health = (rand() % MAX_HEALTH) + 1;
+			senseOfHumour = rand() % 100;
+			willingnessToSurrender = (rand() % 99) + 1; //Makes it so that if willingnessToSurrender is 0, it will never surrender
+			surrenderThreshold = rand() % 100;
+			damageChance = (rand() % 95) + 5;
+		}
+
+		int dropGold() {
+			return (rand() % 4) + 5; //Every monster will drop 5-8 gold when defeated
+		}
+
+		//Setter - only setHealth because this is the only thing that should change
+
+		void setHealth(int newHealth) {
+			health = newHealth;
+		}
+
+		//Getters
+		int getHealth() {
+			return health;
+		}
+		int getSenseOfHumour() {
+			return senseOfHumour;
+		}
+		int getWillingnessToSurrender() {
+			return willingnessToSurrender;
+		}
+		int getSurrenderThreshold() {
+			return surrenderThreshold;
+		}
+		int getDamageChance() {
+			return damageChance;
+		}
+};
+
 class Player {
 	struct item { //Inventory will be a linked list of this
 		string name;
@@ -250,8 +297,7 @@ class Player {
 			if (position == NULL) {
 				return -1;
 			}
-			int quantity = position->quantity;
-			return quantity;
+			return position->quantity;
 		}
 
 		void addItem(string name, int quantity, bool isCombatItem) {
@@ -351,6 +397,20 @@ class Player {
 			}
 		}
 
+		int battleMonster() {
+			/* return codes:
+			  -1 - lost
+			   0 - won
+			   1 - ran away/surrendered
+			*/
+
+			Monster* thisMonster = new Monster;
+			//fight monster
+
+			delete thisMonster;
+			return 0; //if win, else false
+		}
+
 		void openWorldPrompt() {
 			cout << "Use w,a,s,d to move or h for help: ";
 		}
@@ -419,6 +479,22 @@ class Player {
 							map.removeItem(newPosition);
 							map.tryMove(newPosition);
 							playerPosition = newPosition;
+							returnCode = 1;
+							break;
+						case 3:
+							if (yesOrNoInput(red("\nEngage in battle?\n")) == 'y') {
+								int battleReturnCode = battleMonster();
+								if (battleReturnCode == 0) { //if player wins, update coords
+									playerPosition = newPosition;
+									returnCode = 1;
+								} else if (battleReturnCode == 1) { //If player runs away, nothing changes
+									returnCode = 1;
+								} else {
+									returnCode = -1; //If player dies, game over (lost)
+								}
+							} else {
+								returnCode = 1;
+							}
 							break;
 						default:
 							returnCode = 1;
@@ -455,27 +531,6 @@ class Player {
 		int getReturnCode() {
 			return returnCode;
 		}
-};
-
-class Monster {
-	private:
-		const int MAX_HEALTH = 30;
-		const int MAX_DAMAGE = 10;
-		int health;
-		int senseOfHumour; //0 is the worst sense of humour, 99 is the best
-		int willingnessToSurrender; //0 is not willing at all, 99 is will fold immediately, anything in between is up to chance
-		int surrenderThreshold; //The minimum number willingnessToSurrender has to be for the monster to surrender
-		int damageChance;
-
-	public:
-		Monster() {
-			health = (rand() % MAX_HEALTH) + 1;
-			senseOfHumour = rand() % 100;
-			willingnessToSurrender = (rand() % 99) + 1; //Makes it so that if willingnessToSurrender is 0, it will never surrender
-			surrenderThreshold = rand() % 100;
-			damageChance = (rand() % 95) + 5;
-		}
-	
 };
 
 int main() {
