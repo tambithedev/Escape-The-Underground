@@ -107,31 +107,28 @@ class Map{
 			isHOTU = false;
 			clearMap();
 
-			//Choose number of monsters to generate, 0-10 monsters per map 
+			//Choose number of monsters to generate, 0-9 monsters per map 
 			int numberOfMonsters = rand() % 10;
 			bool placed = false;
 			placeItem(playerPosition, numberOfMonsters, (int)monster.number);
 
 			//Choose whether to generate treasure: 20% chance
-			int placeTreasureChance = rand() % 99;
+			int placeTreasureChance = rand() % 100;
 			if (placeTreasureChance >= 80) {
 				placeItem(playerPosition, 1, (int)treasure.number);
 			}
 		}
 		void placeItem(coordinates playerPosition, int iterations, int item) { //Supplements generateMap
-			bool placed = false;
-			int random_x = -1, random_y = -1;
-
 			for (int i = 0; i < iterations; i++) {
+				bool placed = false;
 				while (!(placed)) {
-					random_x = rand() % MAX_X;
-					random_y = rand() % MAX_Y;
+					int random_x = rand() % MAX_X;
+					int random_y = rand() % MAX_Y;
 					if (!(playerPosition.x == random_x && playerPosition.y == random_y) && (grid[random_y][random_x] == (int)empty.number)) {
 						grid[random_y][random_x] = item;
 						placed = true;
 					}
 				}
-				placed = false;
 			}
 		}
 
@@ -204,8 +201,8 @@ class Monster {
 		Monster() {
 			health = (rand() % MAX_HEALTH) + 1;
 			senseOfHumour = rand() % 100;
-			willingnessToSurrender = (rand() % 99) + 1; //Makes it so that if willingnessToSurrender is 0, it will never surrender
-			surrenderThreshold = rand() % 100;
+			surrenderThreshold = (rand() % 100) + 1; //Makes it so that if WTS is 0, it will never surrender
+			willingnessToSurrender = rand() % 101; //WTS should be >= ST for player to successfully get monster to surrender
 			damageChance = (rand() % 95) + 5;
 		}
 
@@ -214,7 +211,6 @@ class Monster {
 		}
 
 		//Setter - only setHealth because this is the only thing that should change
-
 		void setHealth(int newHealth) {
 			health = newHealth;
 		}
@@ -405,10 +401,22 @@ class Player {
 			*/
 
 			Monster* thisMonster = new Monster;
-			//fight monster
+			bool battleOver = false;
+
+			while (!(battleOver)) {
+				char input = '\0';
+
+				cout << left << setw(20) << "\na: attack" << setw(20) << "i: item\n";
+				cout << left << setw(20) << "s: force surrender" << setw(20) << "r: run away\n";
+
+				while (!(input == 'a' || input == 'i' || input == 's' || input == 'r')) {
+					cin >> input;
+					//flush the input buffer
+				}
+			}
 
 			delete thisMonster;
-			return 0; //if win, else false
+			return 0;
 		}
 
 		void openWorldPrompt() {
@@ -477,14 +485,14 @@ class Player {
 						case 2:
 							treasureInteraction();
 							map.removeItem(newPosition);
-							map.tryMove(newPosition);
 							playerPosition = newPosition;
 							returnCode = 1;
 							break;
 						case 3:
 							if (yesOrNoInput(red("\nEngage in battle?\n")) == 'y') {
 								int battleReturnCode = battleMonster();
-								if (battleReturnCode == 0) { //if player wins, update coords
+								if (battleReturnCode == 0) { //If player wins, update coords
+									map.removeItem(newPosition);
 									playerPosition = newPosition;
 									returnCode = 1;
 								} else if (battleReturnCode == 1) { //If player runs away, nothing changes
@@ -619,7 +627,7 @@ void help(state gamestate) {
 	if (gamestate == TUTORIAL) {
 		cout << "Battle controls shall be revealed soon." << endl;
 	} else {
-		cout << "In battle, use " << i << " to use an item, " << blue("a") << " to attack and " << blue("r") << " to run away." << endl;
+		cout << "In battle, use " << i << " to use an item, " << blue("a") << " to attack, " << blue("s") << " to try to get them to surrender, and " << blue("r") << " to run away." << endl;
 		cout << "These controls will be shown in the battle menu as well." << endl;
 	}
 	cout << "\nUse " << blue("h") << " to show this menu." << endl;
