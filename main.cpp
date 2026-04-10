@@ -1,13 +1,18 @@
-//NEXT TASK(S): code use item logic in battle function, including writing deleteItem function (yikes)
+//NEXT TASK(S): write use combat item function, delete item function, finish battle sequence
 #include <iostream>
 #include <cstring>
 #include <iomanip>
-#include <time.h>
+#include <time.h> //need to remove this after randomness overhaul
 #include <cmath>
+#include <random>
 #include "terminal_colours.h"
 
 using namespace std;
 using namespace termcolour;
+
+//Global variables initializing randomness engine
+random_device rd;
+mt19937 rng(rd());
 
 enum state {
 	START,
@@ -109,13 +114,14 @@ class Map{
 			clearMap();
 
 			//Choose number of monsters to generate, 0-9 monsters per map 
-			int numberOfMonsters = rand() % 10;
+			uniform_int_distribution<int> monsterChance(1,6);
+			int numberOfMonsters = monsterChance(rng);
 			bool placed = false;
 			placeItem(playerPosition, numberOfMonsters, (int)monster.number);
 
-			//Choose whether to generate treasure: 20% chance
-			int placeTreasureChance = rand() % 100;
-			if (placeTreasureChance >= 80) {
+			//Choose whether to generate treasure: 40% chance
+			bernoulli_distribution treasureChance(1.0); //debugging, should be 40?
+			if (treasureChance(rng)) {
 				placeItem(playerPosition, 1, (int)treasure.number);
 			}
 		}
@@ -123,10 +129,12 @@ class Map{
 			for (int i = 0; i < iterations; i++) {
 				bool placed = false;
 				while (!(placed)) {
-					int random_x = rand() % MAX_X;
-					int random_y = rand() % MAX_Y;
-					if (!(playerPosition.x == random_x && playerPosition.y == random_y) && (grid[random_y][random_x] == (int)empty.number)) {
-						grid[random_y][random_x] = item;
+					uniform_int_distribution<int> random_x(0,MAX_X - 1);
+					uniform_int_distribution<int> random_y(0,MAX_Y - 1);
+					int try_x = random_x(rng);
+					int try_y = random_y(rng);
+					if (!(playerPosition.x == try_x && playerPosition.y == try_y) && (grid[try_y][try_x] == (int)empty.number)) {
+						grid[try_y][try_x] = item;
 						placed = true;
 					}
 				}
@@ -193,33 +201,59 @@ class Monster {
 		const int MAX_HEALTH = 30;
 		const int MAX_DAMAGE = 10;
 		int health;
-		int senseOfHumour; //0 is the worst sense of humour, 99 is the best
-		int surrenderChance; //0 is not willing at all, 99 is will fold immediately, anything in between is up to chance
-		int surrenderThreshold; //The minimum number willingnessToSurrender has to be for the monster to surrender
+		int senseOfHumour; //0 is the worst sense of humour, 100 is the best
+		double surrenderChance; //0 is not willing at all, 100 is will fold immediately, anything in between is up to chance
 		int attackChance;
 		int defenseChance;
+		int integrity;
+		double persuadability;
 
 	public:
 		Monster() {
-			health = (rand() % MAX_HEALTH) + 1;
-			senseOfHumour = rand() % 100;
-			surrenderThreshold = (rand() % 100) + 1; //Makes it so that if WTS is 0, it will never surrender
-			surrenderChance = rand() % 101; //WTS should be >= ST for player to successfully get monster to surrender
-			attackChance = (rand() % 95) + 5;
-			defenseChance = (rand() % 30) + 11; //10-40% chance for any given monster to dodge an attack
+			uniform_int_distribution<int> healthChance(1,MAX_HEALTH);
+			uniform_int_distribution<int> percentileDistribution(0,100);
+			uniform_real_distribution<double> chanceDistribution(0.0,1.0);
+			uniform_real_distribution<double> cappedChanceDistribution(0.0,0.3);
+			uniform_int_distribution<int> attack(5,100);
+			uniform_int_distribution<int> defense(10,40);
+
+			health = healthChance(rng);
+			senseOfHumour = percentileDistribution(rng);
+			surrenderChance = cappedChanceDistribution(rng);
+			attackChance = attack(rng);
+			defenseChance = defense(rng); //10-40% chance for any given monster to dodge an attack
+			integrity = chanceDistribution(rng);
+			persuadability = chanceDistribution(rng);
 		}
 
 		int dropGold() {
-			return (rand() % 4) + 5; //Every monster will drop 5-8 gold when defeated
+			uniform_int_distribution<int> goldDistribution(5,8); //Every monster will drop 5-8 gold when defeated
+			return goldDistribution(rng);
 		}
 
 		int damagePlayer() {
-			return (rand() % MAX_DAMAGE) + 1;
+			uniform_int_distribution<int> damageDistribution(1,MAX_DAMAGE);
+			return damageDistribution(rng);
 		}
 
-		//Setter - only setHealth because this is the only thing that should change
+		//Setters
 		void reduceHealth(int modifier) {
 			health -= modifier;
+		}
+		void changeSurrenderChance (double modifier) {
+			surrenderChance += modifier;
+			if (surrenderChance < 0) {
+				surrenderChance = 0;
+			}
+		}
+		void changePersuadability (double modifier) {
+			persuadability += modifier;
+			if (persuadability < 0) {
+				persuadability = 0;
+			}
+			if (persuadability > 1) {
+				persuadability = 1;
+			}
 		}
 
 		//Getters
@@ -229,17 +263,20 @@ class Monster {
 		int getSenseOfHumour() {
 			return senseOfHumour;
 		}
-		int getSurrenderChance() {
+		double getSurrenderChance() {
 			return surrenderChance;
-		}
-		int getSurrenderThreshold() {
-			return surrenderThreshold;
 		}
 		int getAttackChance() {
 			return attackChance;
 		}
 		int getDefenseChance() {
 			return defenseChance;
+		}
+		double getIntegrity() {
+			return integrity;
+		}
+		double getPersuadability() {
+			return persuadability;
 		}
 };
 
@@ -283,7 +320,31 @@ class Player {
 			}
 		}
 
-		item* getItemPointer(string searchItem) { //will probably have to overload this function for battle sequence: take int parameter instead for position of item to return
+		bool showCombatItems() {
+			//Return true if at least one item, otherwise false
+			if (inventory == NULL) {
+				cout << "You have absolutely nothing, much less anything you can fight with.\n";
+				return false;
+			}
+
+			int counter = 0;
+			item* current = inventory;
+			do {
+				if (current->isCombatItem) {
+					counter++;
+					cout << counter << " - " << current->name << "( " << current->quantity << ")\n";
+				}
+				current = current->next;
+			} while (current != NULL);
+			
+			if (counter == 0) {
+				cout << "You find yourself with nothing to fight with.\n";
+				return false;
+			}
+			return true;
+		}
+
+		item* getItemPointer(string searchItem) {
 			if (inventory == NULL) {
 				return NULL;
 			}
@@ -292,6 +353,26 @@ class Player {
 			while (current != NULL) {
 				if ((current->name).compare(searchItem) == 0) {
 					return current;
+				}
+				current = current->next;
+			}
+			return NULL;
+		}
+
+		item* getItemPointer(int position) {
+			//This function only works for combat items by design
+			if (inventory == NULL) {
+				return NULL;
+			}
+
+			item* current = inventory;
+			int counter = 0;
+			while (current != NULL) {
+				if (current->isCombatItem) {
+					counter++;
+					if (counter == position) {
+						return current;
+					}
 				}
 				current = current->next;
 			}
@@ -328,6 +409,12 @@ class Player {
 			}
 		}
 
+		void useCombatItem(item* combatItem) {
+			//decrement item quantity, if 0 after reduction, call function to delete from ll
+		}
+		void deleteItem(item* thisItem) { //This function could be overloaded with string search instead but there's no reason for that currently
+		}
+
 		int enterHOTU(Map &map) {
 			map.enterHOTU(playerPosition);
 			return 1;
@@ -361,26 +448,28 @@ class Player {
 		}
 		void treasureInteraction() {
 			//Choose random treasure, add to inventory
-			//Treasure: sword, potion of health, gold, funny joke, bribe, armor
+			//Treasure: sword, potion of health, gold, funny joke, unfunny joke, bribe, armor
 
 			string sword = yellow("sword");
 
 			cout << yellow("\nWhat's this? ") << "you stumble upon";
-			int item = rand() % 7;
+			uniform_int_distribution<int> itemDistribution(0,6);
+			int item = itemDistribution(rng);
 			switch (item) {
 				case 0:
 					cout << " a " << sword << "!\n";
 					if (getQuantity("sword") != -1) {
 						cout << "Since this is not your first " << sword << ", you combine them to do " << yellow("more damage!\n");
 					}
-					addItem("sword", 1, true);
+					addItem("sword", 1, false);
 					break;
 				case 1:
 					cout << " a " << yellow("Potion of Health") << "! Use it to keep your health up!\n";
 					addItem("potion_of_health", 1, true);
 					break;
 				case 2:
-					{int quantity = (rand() % 3) + 1;
+					{uniform_int_distribution<int> goldQuantity(1,3);
+					int quantity = goldQuantity(rng);
 					cout << " " << quantity << yellow(" Gold") << "!\n";
 					addItem("gold", quantity, false);};
 					break;
@@ -412,9 +501,10 @@ class Player {
 
 			Monster* thisMonster = new Monster;
 			int prize = thisMonster->dropGold();
-			bool battleOver = false;
 			int result = -1;
-			string gold = yellow("gold");
+			string gold = yellow("Gold");
+			bool triedSurrender = false;
+			bool triedBribe = false;
 
 			cout << red("\nMonster: \"GRRRRRRR\"\n");
 
@@ -436,23 +526,32 @@ class Player {
 				}
 
 				int monsterTurns = 1;
+				cout << '\n';
 				switch (input) {
 					case 'a':
 						//Damage calculation: a random number between 1 and 8 + 2^(number of swords) (if there are no swords, the bonus will be 0.5 and the number will be rounded down so effectively 0
 						{
+							uniform_int_distribution<int> percentileDistribution(0,100);
+							uniform_int_distribution<int> damageDistribution(1,8);
 							int swordBonus = getQuantity("sword");
-							int attackRoll = rand() % 101;
-							int damage = (rand() % 8) + 1 + pow(2,swordBonus);
+							int attackRoll = percentileDistribution(rng);
+							int damage = damageDistribution(rng) + pow(2,swordBonus);
 							bool success = false;
 
 							if (attackRoll == 100) {
 								cout << green("Critical hit!") << " You hit the monster for " << damage << " damage!\n";
+								if (swordBonus > -1) {
+									cout << "Your sword hit for an extra " << pow(2,swordBonus) << " damage.\n";
+								}
 								success = true;
 							} else if (attackRoll == 0) {
 								cout << red("Critical failure!") << " The monster gets an extra attack on you!\n";
 								monsterTurns++;
 							} else if (attackRoll > thisMonster->getDefenseChance()) {
 								cout << green("Hit!") << " You hit the monster for " << damage << " damage.\n";
+								if (swordBonus > -1) {
+									cout << "Your sword hit for an extra " << pow(2,swordBonus) << " damage.\n";
+								}
 								success = true;
 							} else {
 								cout << red("Miss!") << " The monster dodged your attack.\n";
@@ -462,7 +561,6 @@ class Player {
 								thisMonster->reduceHealth(damage);
 								if (thisMonster->getHealth() <= 0) {
 									cout << green("You won the battle!") << " The monster drops " << prize << " " << gold << ".\n";
-									battleOver = true;
 									addItem("gold", prize, false);
 									result = 0;
 								}
@@ -471,20 +569,58 @@ class Player {
 						break;
 
 					case 'i':
-						//print list of items that can be used in combat, take a number 0-[number of items] to use, receive an input for which item to use or 0 to not use an item, if using an item, another case statement with appropriate actions for each item
+						if (showCombatItems()) {
+							cout << "0 - cancel\n";
+							cout << "Choose item:";
+							while(!(isdigit(input))) {
+								cin >> input;
+								//Flush the input buffer
+								while (cin.peek() != '\n') {
+									cin.ignore();
+								}
+								cin.ignore();
+							}
+							item* thisItem = getItemPointer(input);
+							if (thisItem != NULL) {
+								//case / nested if with appropriate actions for each item
+								useCombatItem(thisItem);
+							} else {
+								cout << "Invalid selection, try again.\n";
+							}
+						}
 						break;
 
 					case 's':
-						cout << "You try to force the monster to surrender...\n";
-						if (thisMonster->getSurrenderChance() >= thisMonster->getSurrenderThreshold()) {
+						{
+						cout << "You use honeyed words to try to get the monster to surrender...\n";
+						bernoulli_distribution surrender(thisMonster->getSurrenderChance());
+
+						if (thisMonster->getSurrenderChance() < 0.05 && thisMonster->getPersuadability() < 0.15) { //Balancing
+							cout << "You get the divine sense that this monster will not give up. You're not going to try.\n";
+							monsterTurns--;
+						} else if (surrender(rng)) {
 							cout << green("It worked!") << " So much for never give up, never what?\n";
 							cout << "The monster runs away and drops " << prize << " " << gold << ".\n";
 							addItem("gold", prize, false);
 							result = 0;
 						} else {
-							cout << "But you fail. This one won't budge.\n";
+							cout << "You fail.\n";
+							if (triedSurrender) {
+								bernoulli_distribution persuade(thisMonster->getPersuadability());
+								if (persuade(rng)) {
+									cout << "You have a feeling you might just get to it though... \n";
+									thisMonster->changeSurrenderChance(0.05);
+									thisMonster->changePersuadability(0.05);
+								} else {
+									cout << "You sense the monster getting more agitated with your repeated requests.\n";
+									thisMonster->changeSurrenderChance(-0.05);
+									thisMonster->changePersuadability(-0.05);
+								}
+							}
+							triedSurrender = true;
 						}
 						break;
+						}
 
 					case 'r':
 						cout << "You run away from the monster! Hopefully that was the right choice...\n";
@@ -503,9 +639,11 @@ class Player {
 						if (i >= 1) {
 							cout << "The monster uses its extra turn!\n";
 						}
-						int defenseRoll = (rand() % 101) + armorProtection;
+						uniform_int_distribution<int> percentileDistribution(0,100);
+						int defenseRoll = percentileDistribution(rng) + armorProtection;
 						if (defenseRoll >= 100) {
-							cout << green("Critical dodge!") << " The monster tries to hit you, but you're untouchable!\n";
+							cout << green("Critical dodge!") << " The monster tries to hit you, but you're untouchable! You get one extra turn.\n";
+							monsterTurns--;
 						} else if (defenseRoll >= thisMonster->getAttackChance()) {
 							cout << green("Dodge!") << " The monster strikes at you, but it misses.\n";
 						} else {
@@ -515,7 +653,7 @@ class Player {
 							if (health <= 0) {
 								cout << red("And just like that, you see the light.\n");
 								result = 1;
-							} else if (health <= 5) {
+							} else if (health <= 10) {
 								cout << red("You see the life flash before your eyes...\n");
 							}
 						}
@@ -525,7 +663,7 @@ class Player {
 					cout << "Your health is " << health << ". The monster's health is " << thisMonster->getHealth() << ".\n";
 				}
 
-				}
+			}
 
 			delete thisMonster;
 			return result;
@@ -537,7 +675,6 @@ class Player {
 
 		void openWorldControls(Map &map) {
 			char input = '\0';
-			int returnCode;
 			int tryMoveReturnCode = -1;
 			bool movePlayer = true;
 
@@ -719,7 +856,7 @@ void tutorial(state gamestate) {
 	string doorkeeper = magenta("The Doorkeeper");
 
 	cout << "You are " << magenta("P") << ", the Player. You find yourself trapped in a mysterious world you know only as " << underground << "." << endl;
-	cout << "You will have to " << red("fight to the death") << " to escape. Or will you?" << endl;
+	cout << "You will have to " << red("fight to the death") << " to escape... or will you?" << endl;
 	cout << magenta("Monsters") << " can be found randomly throughout " << underground << ". The only way to escape is to get " << yellow("Gold") << " from Monsters to give to " << doorkeeper << "." << endl;
 	cout << doorkeeper << " can be found in " << magenta("The Heart of ") << underground << ". The areas outside of this place are never constant, ever shifting. Once you leave an area, you may never find another one like it." << endl;
 	cout << "Should you fight them? Or should you make more strategic decisions? It's all up to you..." << endl;
@@ -740,6 +877,8 @@ void help(state gamestate) {
 		cout << "Battle controls shall be revealed soon." << endl;
 	} else {
 		cout << "In battle, use " << i << " to use an item, " << blue("a") << " to attack, " << blue("s") << " to try to get them to surrender, and " << blue("r") << " to run away." << endl;
+		cout << "When you use an item, you have a 50\% chance to get an " << green("extra turn") << ".\n";
+		cout << "Tip: Be careful trying to get monsters to surrender or giving them a bribe - some might be swayed eventually, while others might get more stubborn the more you try to push the issue.\n";
 		cout << "These controls will be shown in the battle menu as well." << endl;
 	}
 	cout << "\nUse " << blue("h") << " to show this menu." << endl;
