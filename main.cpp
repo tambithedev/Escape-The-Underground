@@ -1,8 +1,9 @@
-//NEXT TASK(S): code monster fight sequence, write deleteItem function (yikes)
+//NEXT TASK(S): code use item logic in battle function, including writing deleteItem function (yikes)
 #include <iostream>
 #include <cstring>
 #include <iomanip>
 #include <time.h>
+#include <cmath>
 #include "terminal_colours.h"
 
 using namespace std;
@@ -193,26 +194,32 @@ class Monster {
 		const int MAX_DAMAGE = 10;
 		int health;
 		int senseOfHumour; //0 is the worst sense of humour, 99 is the best
-		int willingnessToSurrender; //0 is not willing at all, 99 is will fold immediately, anything in between is up to chance
+		int surrenderChance; //0 is not willing at all, 99 is will fold immediately, anything in between is up to chance
 		int surrenderThreshold; //The minimum number willingnessToSurrender has to be for the monster to surrender
-		int damageChance;
+		int attackChance;
+		int defenseChance;
 
 	public:
 		Monster() {
 			health = (rand() % MAX_HEALTH) + 1;
 			senseOfHumour = rand() % 100;
 			surrenderThreshold = (rand() % 100) + 1; //Makes it so that if WTS is 0, it will never surrender
-			willingnessToSurrender = rand() % 101; //WTS should be >= ST for player to successfully get monster to surrender
-			damageChance = (rand() % 95) + 5;
+			surrenderChance = rand() % 101; //WTS should be >= ST for player to successfully get monster to surrender
+			attackChance = (rand() % 95) + 5;
+			defenseChance = (rand() % 30) + 11; //10-40% chance for any given monster to dodge an attack
 		}
 
 		int dropGold() {
 			return (rand() % 4) + 5; //Every monster will drop 5-8 gold when defeated
 		}
 
+		int damagePlayer() {
+			return (rand() % MAX_DAMAGE) + 1;
+		}
+
 		//Setter - only setHealth because this is the only thing that should change
-		void setHealth(int newHealth) {
-			health = newHealth;
+		void reduceHealth(int modifier) {
+			health -= modifier;
 		}
 
 		//Getters
@@ -222,14 +229,17 @@ class Monster {
 		int getSenseOfHumour() {
 			return senseOfHumour;
 		}
-		int getWillingnessToSurrender() {
-			return willingnessToSurrender;
+		int getSurrenderChance() {
+			return surrenderChance;
 		}
 		int getSurrenderThreshold() {
 			return surrenderThreshold;
 		}
-		int getDamageChance() {
-			return damageChance;
+		int getAttackChance() {
+			return attackChance;
+		}
+		int getDefenseChance() {
+			return defenseChance;
 		}
 };
 
@@ -273,7 +283,7 @@ class Player {
 			}
 		}
 
-		item* getItemPointer(string searchItem) {
+		item* getItemPointer(string searchItem) { //will probably have to overload this function for battle sequence: take int parameter instead for position of item to return
 			if (inventory == NULL) {
 				return NULL;
 			}
@@ -395,28 +405,130 @@ class Player {
 
 		int battleMonster() {
 			/* return codes:
-			  -1 - lost
-			   0 - won
-			   1 - ran away/surrendered
+			   0 - won/monster surrendered
+			   1 - lost
+			   2 - ran away
 			*/
 
 			Monster* thisMonster = new Monster;
+			int prize = thisMonster->dropGold();
 			bool battleOver = false;
+			int result = -1;
+			string gold = yellow("gold");
 
-			while (!(battleOver)) {
+			cout << red("\nMonster: \"GRRRRRRR\"\n");
+
+			while (result == -1) {
 				char input = '\0';
 
-				cout << left << setw(20) << "\na: attack" << setw(20) << "i: item\n";
-				cout << left << setw(20) << "s: force surrender" << setw(20) << "r: run away\n";
+				cout << '\n';
+				cout << left << setw(20) << "a: attack" << setw(20) << "i: item" << endl;;
+				cout << left << setw(20) << "s: force surrender" << setw(20) << "r: run away" << endl;
 
 				while (!(input == 'a' || input == 'i' || input == 's' || input == 'r')) {
 					cin >> input;
-					//flush the input buffer
+					input = tolower(input);
+					//Flush the input buffer
+					while (cin.peek() != '\n') {
+						cin.ignore();
+					}
+					cin.ignore();
 				}
-			}
+
+				int monsterTurns = 1;
+				switch (input) {
+					case 'a':
+						//Damage calculation: a random number between 1 and 8 + 2^(number of swords) (if there are no swords, the bonus will be 0.5 and the number will be rounded down so effectively 0
+						{
+							int swordBonus = getQuantity("sword");
+							int attackRoll = rand() % 101;
+							int damage = (rand() % 8) + 1 + pow(2,swordBonus);
+							bool success = false;
+
+							if (attackRoll == 100) {
+								cout << green("Critical hit!") << " You hit the monster for " << damage << " damage!\n";
+								success = true;
+							} else if (attackRoll == 0) {
+								cout << red("Critical failure!") << " The monster gets an extra attack on you!\n";
+								monsterTurns++;
+							} else if (attackRoll > thisMonster->getDefenseChance()) {
+								cout << green("Hit!") << " You hit the monster for " << damage << " damage.\n";
+								success = true;
+							} else {
+								cout << red("Miss!") << " The monster dodged your attack.\n";
+							}
+
+							if (success) {
+								thisMonster->reduceHealth(damage);
+								if (thisMonster->getHealth() <= 0) {
+									cout << green("You won the battle!") << " The monster drops " << prize << " " << gold << ".\n";
+									battleOver = true;
+									addItem("gold", prize, false);
+									result = 0;
+								}
+							}
+						}
+						break;
+
+					case 'i':
+						//print list of items that can be used in combat, take a number 0-[number of items] to use, receive an input for which item to use or 0 to not use an item, if using an item, another case statement with appropriate actions for each item
+						break;
+
+					case 's':
+						cout << "You try to force the monster to surrender...\n";
+						if (thisMonster->getSurrenderChance() >= thisMonster->getSurrenderThreshold()) {
+							cout << green("It worked!") << " So much for never give up, never what?\n";
+							cout << "The monster runs away and drops " << prize << " " << gold << ".\n";
+							addItem("gold", prize, false);
+							result = 0;
+						} else {
+							cout << "But you fail. This one won't budge.\n";
+						}
+						break;
+
+					case 'r':
+						cout << "You run away from the monster! Hopefully that was the right choice...\n";
+						result = 2;
+						break;
+					}
+
+				if (result == -1) {
+					for (int i = 0; i < monsterTurns; i++) {
+						//Armor defense calculation: +10 defense for every piece of armor
+						int armorProtection = 10 * (getQuantity("armor"));
+						if (armorProtection < 0) {
+							armorProtection = 0;
+						}
+
+						if (i >= 1) {
+							cout << "The monster uses its extra turn!\n";
+						}
+						int defenseRoll = (rand() % 101) + armorProtection;
+						if (defenseRoll >= 100) {
+							cout << green("Critical dodge!") << " The monster tries to hit you, but you're untouchable!\n";
+						} else if (defenseRoll >= thisMonster->getAttackChance()) {
+							cout << green("Dodge!") << " The monster strikes at you, but it misses.\n";
+						} else {
+							int damage = thisMonster->damagePlayer();
+							health -= damage;
+							cout << red("Ouch!") << " The monster hits you for " << damage << " damage.\n";
+							if (health <= 0) {
+								cout << red("And just like that, you see the light.\n");
+								result = 1;
+							} else if (health <= 5) {
+								cout << red("You see the life flash before your eyes...\n");
+							}
+						}
+					}
+				}
+				if (result == -1) { //Have to repeat this condition because of the case of player losing
+					cout << "Your health is " << health << ". The monster's health is " << thisMonster->getHealth() << ".\n";
+				}
+
+				}
 
 			delete thisMonster;
-			return 0;
+			return result;
 		}
 
 		void openWorldPrompt() {
@@ -491,14 +603,14 @@ class Player {
 						case 3:
 							if (yesOrNoInput(red("\nEngage in battle?\n")) == 'y') {
 								int battleReturnCode = battleMonster();
-								if (battleReturnCode == 0) { //If player wins, update coords
+								if (battleReturnCode == 0) { //If player wins or monster surrenders, update coords
 									map.removeItem(newPosition);
 									playerPosition = newPosition;
 									returnCode = 1;
-								} else if (battleReturnCode == 1) { //If player runs away, nothing changes
-									returnCode = 1;
+								} else if (battleReturnCode == 1) { //If player dies, game over (lost)
+									returnCode = -1;
 								} else {
-									returnCode = -1; //If player dies, game over (lost)
+									returnCode = 1; //If player runs away, nothing changes
 								}
 							} else {
 								returnCode = 1;
