@@ -15,17 +15,7 @@ mt19937 rng(rd());
 enum state {
 	START,
 	TUTORIAL,
-	OPEN_WORLD,
-	EXIT
-};
-
-enum mapItem {
-	EMPTY,
-	WALL,
-	PLAYER,
-	MONSTER,
-	DOORKEEPER,
-	TREASURE
+	OPEN_WORLD
 };
 
 struct coordinates {
@@ -42,10 +32,20 @@ class Map{
 		const int MAX_X = 15; const int MAX_Y = 5;
 		const int MAP_X = 17; const int MAP_Y = 7;
 
+		enum mapItem {
+			EMPTY,
+			WALL,
+			PLAYER,
+			MONSTER,
+			DOORKEEPER,
+			TREASURE
+		};
+
 		struct mapEntry {
 			mapItem number;
 			char character;
 		};
+
 		const mapEntry empty = {EMPTY, '.'};
 		const mapEntry wall = {WALL, 'x'};
 		const mapEntry player = {PLAYER, 'P'};
@@ -111,7 +111,7 @@ class Map{
 			isHOTU = false;
 			clearMap();
 
-			//Choose number of monsters to generate, 0-9 monsters per map 
+			//Choose number of monsters to generate, 1-6 monsters per map 
 			uniform_int_distribution<int> monsterChance(1,6);
 			int numberOfMonsters = monsterChance(rng);
 			bool placed = false;
@@ -539,11 +539,11 @@ class Player {
 				while (!(input == 'a' || input == 'i' || input == 's' || input == 'r')) {
 					cin >> input;
 					input = tolower(input);
-					//Flush the input buffer
+					
+					//Flush the input buffer, leave only '\n'
 					while (cin.peek() != '\n') {
 						cin.ignore();
 					}
-					cin.ignore();
 				}
 
 				int monsterTurns = 1;
@@ -605,11 +605,10 @@ class Player {
 								cout << "Choose item: ";
 								cin >> input;
 								selection = input - '0';
-								//Flush the input buffer
+								//Flush the input buffer, leaving only '\n'
 								while (cin.peek() != '\n') {
 									cin.ignore();
 								}
-								cin.ignore();
 							}
 
 							//Find which item was selected
@@ -633,7 +632,7 @@ class Player {
 									health += addedHealth;
 									if (health >= MAX_HEALTH) {
 										cout << "You're at " << green("MAX HEALTH!") << " Doctor who?\n";
-										health = MAX_HEALTH
+										health = MAX_HEALTH;
 									}
 
 								} else if (thisItem->name == "bribe") {
@@ -642,10 +641,11 @@ class Player {
 										cout << "This monster is an upstanding citizen who would never accept a bribe.\n";
 										addItem("bribe", 1, true); //To "prevent" the bribe from being used up
 									} else if (monsterIntegrity >= 33) {
-										cout << red("Monster: Hmmm.\n");
+										cout << red("Monster: \"Hmmm.\"\n");
 										cout << "The monster looks conflicted...\nThe monster discretely takes your offering and " << green("gives you a gift") << " in exchange. You receive " << bonusChange << " " << gold << ".\n";
+										addItem("gold", bonusChange, false);
 									} else {
-										cout << red("Monster: I'm out!\n");
+										cout << red("Monster: \"I'm out!\"\n");
 										cout << "The monster takes your bribe and mysteriously disappears. " << green("Welp, that was easy!\n");
 										result = 0;
 									}
@@ -654,9 +654,9 @@ class Player {
 									int jokeResponse = response(rng);
 
 									if (thisItem->name == "funny_joke") {
-										cout << red("Monster: HAHAHAHA!\n");
-										cout << "The monster";
 										if (thisMonster->getSenseOfHumour() > 50) {
+											cout << red("Monster: \"HAHAHAHA!\"\n");
+											cout << "The monster";
 											switch (jokeResponse) {
 												case 0:
 													cout << " laughs so hard that it has a stroke and " << green("dies!") << '\n';
@@ -668,11 +668,12 @@ class Player {
 													monsterDamaged = true;
 													break;
 												case 2:
-													cout << "likes your joke.\n";
+													cout << " likes your joke.\n";
 													break;
 											}
 										} else {
-											cout << " doesn't get it";
+											cout << red("Monster: \"...\"\n");
+											cout << "The monster doesn't get it";
 											switch (jokeResponse) {
 												case 0:
 													cout << ".\n";
@@ -690,7 +691,7 @@ class Player {
 										}
 									} else {
 										if (thisMonster->getSenseOfHumour() < 50) {
-											cout << red("Monster: Hehehehe!\n");
+											cout << red("Monster: \"Hehehehe!\"\n");
 											cout << "The monster ";
 											switch (jokeResponse) {
 												case 0:
@@ -732,7 +733,6 @@ class Player {
 									} else {
 										showMonsterHealth = true;
 									}
-								} else if (result == 0) {
 								}
 							} else {
 								if (input != '0') {
@@ -848,6 +848,7 @@ class Player {
 				openWorldPrompt();
 				cin >> input;
 				input = tolower(input);
+				//I do not clear the input buffer here as that is how multiple inputs at once are accepted
 			}
 			if (input == 'w' || input == 'a' || input == 's' || input == 'd') {
 				coordinates newPosition = playerPosition;
@@ -995,7 +996,12 @@ int main() {
 		*/
 		default_player.openWorldControls(default_map);
 	}
-	cout << "\nThanks for playing.\n" << endl;
+
+	//Clear input buffer - if no bugs, only '\n' should be left
+	cin.ignore();
+	cout << "\nEnter any key to exit:\n";
+	cin.get();
+	cout << "Thanks for playing.\n";
 
 	return 0;
 }
@@ -1005,6 +1011,7 @@ char yesOrNoInput(string repeatInstruction) {
 	while (!(tolower(yn) == 'y' || tolower(yn) == 'n')) {
 		cout << repeatInstruction << " [y/n]: ";
 		cin >> yn;
+		//Clear input buffer, leaving only '\n'
 		while (cin.peek() != '\n') {
 			cin.ignore();
 		}
@@ -1040,7 +1047,7 @@ void help(state gamestate) {
 	} else {
 		cout << "In battle, use " << i << " to use an item, " << blue("a") << " to attack, " << blue("s") << " to try to get them to surrender, and " << blue("r") << " to run away." << endl;
 		cout << "These controls will be shown in the battle menu as well." << endl;
-		cout << "When you use an item, you have a 50\% chance to get an " << green("extra turn") << ".\n";
+		cout << "When you use an item, you have a 50% chance to get an " << green("extra turn") << ".\n";
 		cout << green("Tip:") << " Be careful trying to get monsters to surrender or giving them a bribe - some might be swayed eventually, while others might get more stubborn the more you try to push the issue.\n";
 		cout << green("Tip:") << " Try to understand the monster's personality. Some actions will work better on certain monsters than on others.\n";
 	}
